@@ -1,0 +1,225 @@
+AWSTemplateFormatVersion: 2010-09-09
+# https://www.ripcitysoftware.com/blog/iam-roles-cloudformation/
+
+Description: EC2 Instance with IAM Role Controlled Access to S3 Bucket
+Parameters:
+  KeyName:
+    Description: >-
+      (Optional) Name of an existing EC2 KeyPair to enable SSH access to the
+      instance. If this is not provided you will not be able to SSH on to the
+      EC2 instance.
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+    AllowedPattern: '[\x20-\x7E]*'
+    ConstraintDescription: can contain only ASCII characters.
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  CreatingUserId:
+    Description: UserId for IAM user executing this template
+    Type: String
+    MinLength: '5'
+    MaxLength: '255'
+    AllowedPattern: 'AIDA[A-Z0-9]+'
+    ConstraintDescription: Starts with AIDA and contains capital letters and digits
+  ExistingS3Bucket:
+    Description: An existing S3 Bucket
+    Default: ''
+    Type: String
+Conditions:
+  UseEC2KeyName: !Not 
+    - !Equals 
+      - !Ref KeyName
+      - ''
+  CreateS3Bucket: !Equals 
+    - !Ref ExistingS3Bucket
+    - ''
+Mappings:
+  AMIByRegionMap:
+    us-east-1:
+      AmaLinux2HVM: ami-009d6802948d06e52
+    us-east-2:
+      AmaLinux2HVM: ami-02e680c4540db351e
+    us-west-1:
+      AmaLinux2HVM: ami-011b6930a81cd6aaf
+    us-west-2:
+      AmaLinux2HVM: ami-01bbe152bf19d0289
+    eu-central-1:
+      AmaLinux2HVM: ami-034fffcc6a0063961
+    eu-west-1:
+      AmaLinux2HVM: ami-09693313102a30b2c
+    eu-west-2:
+      AmaLinux2HVM: ami-0274e11dced17bb5b
+    eu-west-3:
+      AmaLinux2HVM: ami-051707cdba246187b
+    ap-southeast-1:
+      AmaLinux2HVM: ami-0b84d2c53ad5250c2
+    ap-southeast-2:
+      AmaLinux2HVM: ami-08589eca6dcc9b39c
+    ap-northeast-1:
+      AmaLinux2HVM: ami-0a2de1c3b415889d2
+    ap-northeast-2:
+      AmaLinux2HVM: ami-0b4fdb56a00adb616
+    ap-south-1:
+      AmaLinux2HVM: ami-06bcd1131b2f55803
+    sa-east-1:
+      AmaLinux2HVM: ami-0112d42866980b373
+    ca-central-1:
+      AmaLinux2HVM: ami-076b4adb3f90cd384
+Resources:
+  NewS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Condition: CreateS3Bucket
+    Properties:
+      AccessControl: Private
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 084674c4-d169-467a-8c57-9c40f4ac7515
+  BucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !If 
+        - CreateS3Bucket
+        - !Ref NewS3Bucket
+        - !Ref ExistingS3Bucket
+      PolicyDocument:
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !If 
+                    - CreateS3Bucket
+                    - !Ref NewS3Bucket
+                    - !Ref ExistingS3Bucket
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !If 
+                    - CreateS3Bucket
+                    - !Ref NewS3Bucket
+                    - !Ref ExistingS3Bucket
+                  - /*
+            Condition:
+              StringNotLike:
+                'aws:userId':
+                  - !Join 
+                    - ''
+                    - - !GetAtt 
+                        - RootRole
+                        - RoleId
+                      - ':*'
+                  - !Ref 'AWS::AccountId'
+                  - !Ref CreatingUserId
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 79792e72-e971-4b24-8e11-df64e45a27e4
+  RootRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: bad48b6b-f9c0-4759-b45f-ce5aad99db41
+  RolePolicies:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: root
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:DeleteObject'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !If 
+                    - CreateS3Bucket
+                    - !Ref NewS3Bucket
+                    - !Ref ExistingS3Bucket
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !If 
+                    - CreateS3Bucket
+                    - !Ref NewS3Bucket
+                    - !Ref ExistingS3Bucket
+                  - /*
+      Roles:
+        - !Ref RootRole
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 4039150e-8145-4b2c-88ed-8dd6bf1de90b
+  RootInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref RootRole
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 0662d5be-a065-43bd-bad2-73e908021d25
+  Ec2SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable SSH access and HTTP access on the inbound port
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref SSHLocation
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 51646107-7846-4e45-96b2-510f18e77432
+  Ec2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: !FindInMap 
+        - AMIByRegionMap
+        - !Ref 'AWS::Region'
+        - AmaLinux2HVM
+      InstanceType: t2.micro
+      KeyName: !If 
+        - UseEC2KeyName
+        - !Ref KeyName
+        - !Ref 'AWS::NoValue'
+      IamInstanceProfile: !Ref RootInstanceProfile
+      SecurityGroups:
+        - !Ref Ec2SecurityGroup
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 0c5fa92b-1212-4030-9e23-b55504b09586
+Outputs:
+  S3Bucket:
+    Description: S3 Bucket
+    Value: !If 
+      - CreateS3Bucket
+      - !Ref NewS3Bucket
+      - !Ref ExistingS3Bucket
