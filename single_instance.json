@@ -174,7 +174,7 @@
         "CidrBlock" : "172.31.0.0/16",
         "Tags" : [ {
           "Key" : "Name",
-          "Value" : 
+          "Value" : "PubVPC"
         } ]
       }
     },
